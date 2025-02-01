@@ -1,0 +1,476 @@
+const { React, ReactDOM } = window;
+const { Responsive, WidthProvider } = window.ReactGridLayout;
+const ResponsiveGridLayout = WidthProvider(Responsive);
+
+const App = () => {
+  const totalRows = 12;
+  const totalCols = 9;
+
+  const [rowHeight, setRowHeight] = React.useState(
+    window.innerHeight / totalRows,
+  );
+  const [layout, setLayout] = React.useState(() => {
+    const savedLayout = JSON.parse(localStorage.getItem("gridLayout"));
+    return (
+      savedLayout || [
+        { i: "a", x: 0, y: 0, w: 4, h: 9.9, collapsed: false, prevHeight: 9.9 },
+        {
+          i: "b",
+          x: 5,
+          y: 0,
+          w: 5,
+          h: 3.3,
+          collapsed: false,
+          prevHeight: 3.3,
+          xAxisOption: "day",
+        },
+        {
+          i: "c",
+          x: 5,
+          y: 4,
+          w: 5,
+          h: 3.3,
+          collapsed: false,
+          prevHeight: 3.3,
+          xAxisOption: "day",
+          wasteTypeOption: "ALL",
+        },
+        {
+          i: "d",
+          x: 5,
+          y: 8,
+          w: 5,
+          h: 3.3,
+          collapsed: false,
+          prevHeight: 3.3,
+          xAxisOption: "day",
+        },
+      ]
+    );
+  });
+
+  const handleResize = () => {
+    setRowHeight(window.innerHeight / totalRows);
+    triggerReflow();
+  };
+
+  const toggleCollapse = (id) => {
+    setLayout((prevLayout) => {
+      const newLayout = prevLayout.map((item) => {
+        if (item.i === id) {
+          const isCollapsed = !item.collapsed;
+          return {
+            ...item,
+            collapsed: isCollapsed,
+            h: isCollapsed ? 1 : item.prevHeight,
+            prevHeight: isCollapsed ? item.h : item.prevHeight,
+          };
+        }
+        return item;
+      });
+      localStorage.setItem("gridLayout", JSON.stringify(newLayout));
+      return newLayout;
+    });
+  };
+
+  const triggerReflow = () => {
+    const element = document.querySelector(".chart-container");
+    element.offsetHeight;
+    element.offsetWidth;
+  };
+
+  const removeFromLocalStorage = (key) => {
+    localStorage.removeItem(key); // TODO call with removeFromLocalStorage("gridLayout");
+  };
+
+  const onLayoutChange = (newLayout) => {
+    setLayout((prevLayout) =>
+      prevLayout.map((item) => {
+        const updatedItem = newLayout.find((nl) => nl.i === item.i);
+        return {
+          ...item,
+          x: Math.min(updatedItem.x, totalCols - item.w),
+          y: updatedItem.y,
+          w: updatedItem.w,
+          h: item.collapsed ? 1 : updatedItem.h,
+        };
+      }),
+    );
+    localStorage.setItem("gridLayout", JSON.stringify(newLayout));
+  };
+
+  React.useEffect(() => {
+    const element = document.querySelector(".chart-container");
+
+    const triggerReflow = () => {
+      element.offsetWidth; // Triggers reflow for width
+      element.offsetHeight; // Triggers reflow for height
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      triggerReflow(); // Trigger reflow whenever size changes
+    });
+
+    resizeObserver.observe(element);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  React.useEffect(() => {
+    window.addEventListener("resize", handleResize);
+
+    // stop dragging behavior when clicking the dropdown or collapse button, so the red shadowing used for dragging the item, is not shown
+    const handleStopDrag = (e) => {
+      e.stopPropagation();
+    };
+
+    const dropdowns = document.querySelectorAll(".date-selector select");
+    const collapseBtns = document.querySelectorAll(".collapse-btn");
+
+    dropdowns.forEach((dropdown) => {
+      dropdown.addEventListener("mousedown", handleStopDrag);
+    });
+    collapseBtns.forEach((btn) => {
+      btn.addEventListener("mousedown", handleStopDrag);
+    });
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      dropdowns.forEach((dropdown) => {
+        dropdown.removeEventListener("mousedown", handleStopDrag);
+      });
+      collapseBtns.forEach((btn) => {
+        btn.removeEventListener("mousedown", handleStopDrag);
+      });
+    };
+  }, []);
+
+  const getXAxisData = (option) => {
+    switch (option) {
+      case "week":
+        return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+      case "month":
+        return ["January", "February", "March", "April", "May", "June"];
+      default:
+        return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    }
+  };
+
+  const getChartValues = (option = "day", filter = "ALL") => {
+    const data = {
+      day: [
+        [20, 25, 22, 20, 30, 28],
+        [15, 18, 20, 17, 25, 23],
+        [5, 6, 8, 10, 12, 13],
+        [10, 12, 14, 15, 18, 20],
+        [8, 10, 12, 14, 16, 18],
+        [12, 15, 18, 20, 22, 25],
+      ],
+      week: [
+        [120, 130, 140, 150, 160, 170],
+        [100, 110, 120, 130, 140, 150],
+        [80, 90, 100, 110, 120, 130],
+        [60, 70, 80, 90, 100, 110],
+        [50, 60, 70, 80, 90, 100],
+        [40, 50, 60, 70, 80, 90],
+      ],
+      month: [
+        [500, 550, 600, 650, 700, 750],
+        [400, 450, 500, 550, 600, 650],
+        [300, 350, 400, 450, 500, 550],
+        [200, 250, 300, 350, 400, 450],
+        [100, 150, 200, 250, 300, 350],
+        [50, 100, 150, 200, 250, 300],
+      ],
+    };
+
+    if (!data[option]) return [[]];
+
+    // waste type filter
+    const modifier =
+      filter === "Waste Type A"
+        ? 0.8
+        : filter === "Waste Type B"
+          ? 0.6
+          : filter === "Waste Type G"
+            ? 0.4
+            : 1;
+
+    return data[option].map((values) => values.map((v) => v * modifier));
+  };
+
+  const colors = [
+    "#6EC1E4", // Light Blue
+    "#F8AE54", // Orange
+    "#AFDC8F", // Green
+    "#5E40BE", // Purple
+    "#e74c3c", // Red
+    "#2471a3", // Blue Dark
+    "#1abc9c", // Turquoise
+  ];
+
+  const renderChart = (id) => {
+    const chartCLayout = layout.find((item) => item.i === "c") || {};
+    const chartData = {
+      b: {
+        data: [
+          {
+            x: getXAxisData(layout.find((item) => item.i === "b").xAxisOption),
+            y: getChartValues(
+              layout.find((item) => item.i === "b").xAxisOption,
+            )[0],
+            type: "bar",
+            name: "Truck Number",
+            marker: { color: colors[0] },
+          },
+          {
+            x: getXAxisData(layout.find((item) => item.i === "b").xAxisOption),
+            y: [20, 18, 45, 30, 15, 28],
+            type: "scatter",
+            mode: "lines+markers",
+            name: "Waste Type A",
+            line: { color: colors[4] },
+          },
+          {
+            x: getXAxisData(layout.find((item) => item.i === "b").xAxisOption),
+            y: [15, 2, 79, 25, 50, 27],
+            type: "scatter",
+            mode: "lines+markers",
+            name: "Waste Types B",
+            line: { color: colors[3] },
+          },
+        ],
+        layout: {
+          barmode: "stack",
+          yaxis: {
+            title: "Truck Number",
+            rangemode: "tozero",
+          },
+          responsive: true,
+        },
+      },
+
+      c: {
+        data:
+          getChartValues(
+            chartCLayout.xAxisOption || "day",
+            chartCLayout.wasteTypeOption || "ALL",
+          )?.map((yValues, index) => {
+            // Adjust the y-values dynamically based on the wasteTypeOption
+            const adjustedYValues = yValues.map((value) => {
+              if (chartCLayout.wasteTypeOption === "Waste Type A") {
+                return value * 1.1; // Example: Increase by 10% for Waste Type A
+              } else if (chartCLayout.wasteTypeOption === "Waste Type B") {
+                return value * 0.9; // Example: Decrease by 10% for Waste Type B
+              } else {
+                return value; // Default case, no modification
+              }
+            });
+
+            return {
+              x: getXAxisData(chartCLayout.xAxisOption || "day"),
+              y: adjustedYValues || [], //by waste type
+              type: "bar",
+              name: [
+                "Customer A",
+                "Customer B",
+                "Customer C",
+                "Customer D",
+                "Customer E",
+                "Customer F",
+              ][index],
+              marker: { color: colors[index % colors.length] },
+              orientation: "v",
+            };
+          }) || [],
+        layout: {
+          barmode: "stack",
+          xaxis: {
+            tickangle: -45,
+          },
+          yaxis: {
+            title: "Gallons (Metric)",
+            rangemode: "tozero",
+          },
+          responsive: true,
+        },
+      },
+
+      d: {
+        data: [
+          {
+            x: getXAxisData(layout.find((item) => item.i === "d").xAxisOption),
+            y: getChartValues(
+              layout.find((item) => item.i === "d").xAxisOption,
+            )[0],
+            type: "bar",
+            name: "Manifest Dump Site 1",
+            marker: { color: colors[6] },
+          },
+          {
+            x: getXAxisData(layout.find((item) => item.i === "d").xAxisOption),
+            y: getChartValues(
+              layout.find((item) => item.i === "d").xAxisOption,
+            )[1],
+            type: "bar",
+            name: "Manifest Dump Site 2",
+            marker: { color: colors[1] },
+          },
+          {
+            x: getXAxisData(layout.find((item) => item.i === "d").xAxisOption),
+            y: getChartValues(
+              layout.find((item) => item.i === "d").xAxisOption,
+            )[2],
+            type: "bar",
+            name: "Manifest Dump Site 3",
+            marker: { color: colors[4] },
+          },
+        ],
+        layout: {
+          barmode: "stack",
+          yaxis: {
+            title: "Gallons (Metric)",
+            rangemode: "tozero",
+          },
+          responsive: true,
+        },
+      },
+    };
+
+    if (chartData[id]) {
+      const chartElement = document.getElementById(`${id}-chart`);
+      Plotly.react(chartElement, chartData[id].data, chartData[id].layout, {
+        responsive: true,
+      });
+      const resizeChart = () => Plotly.Plots.resize(chartElement);
+      window.addEventListener("resize", resizeChart);
+      return () => window.removeEventListener("resize", resizeChart);
+    }
+  };
+
+  React.useEffect(() => {
+    layout.forEach((item) => {
+      if (!item.collapsed) {
+        renderChart(item.i);
+      }
+    });
+  }, [layout]);
+
+  return (
+    <div>
+      <div id="toolbar">Toolbar</div>
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={{ lg: layout }}
+        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+        cols={{
+          lg: totalCols,
+          md: totalCols,
+          sm: totalCols,
+          xs: totalCols,
+          xxs: totalCols,
+        }}
+        rowHeight={rowHeight}
+        onLayoutChange={onLayoutChange}
+        onResize={(layout, oldItem, newItem) => {
+          const chartElement = document.getElementById(`${newItem.i}-chart`);
+          if (chartElement) {
+            Plotly.Plots.resize(chartElement);
+          }
+        }}
+      >
+        {layout.map((item) => (
+          <div
+            key={item.i}
+            data-grid={{
+              i: item.i,
+              x: item.x,
+              y: item.y,
+              w: item.w,
+              h: item.h,
+            }}
+            style={
+              item.i === "a"
+                ? { backgroundColor: "#f0f0f0", marginRight: "50px" }
+                : {}
+            }
+          >
+            <div className="chart-container">
+              <div className="chart-header">
+                <span className="chart-title">
+                  {item.i === "b"
+                    ? "Truck Waste Type Usage"
+                    : item.i === "c"
+                      ? "Customer Waste Type Usage"
+                      : item.i === "d"
+                        ? "Dump Site Usage"
+                        : "Table"}
+                </span>
+
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  {!item.collapsed && item.i !== "a" && (
+                    <div className="date-selector">
+                      <select
+                        value={item.xAxisOption || "day"}
+                        onChange={(e) => {
+                          const xAxisOption = e.target.value;
+                          setLayout((prevLayout) =>
+                            prevLayout.map((i) =>
+                              i.i === item.i ? { ...i, xAxisOption } : i,
+                            ),
+                          );
+                        }}
+                      >
+                        <option value="day">Day</option>
+                        <option value="week">Week</option>
+                        <option value="month">Month</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {item.i === "c" && !item.collapsed && (
+                    <div className="date-selector">
+                      <select
+                        value={item.wasteTypeOption || "ALL"}
+                        onChange={(e) => {
+                          const wasteTypeOption = e.target.value;
+                          setLayout((prevLayout) =>
+                            prevLayout.map((i) =>
+                              i.i === item.i ? { ...i, wasteTypeOption } : i,
+                            ),
+                          );
+                        }}
+                      >
+                        <option value="ALL">ALL</option>
+                        <option value="Waste Type A">Waste Type A</option>
+                        <option value="Waste Type B">Waste Type B</option>
+                        <option value="Waste Type G">Waste Type G</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-default collapse-btn"
+                    onClick={() => toggleCollapse(item.i)}
+                  >
+                    <span
+                      className={`glyphicon glyphicon-chevron-${item.collapsed ? "down" : "up"}`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {!item.collapsed && item.i !== "a" && (
+                <div className="chart-content" id={`${item.i}-chart`}></div>
+              )}
+            </div>
+          </div>
+        ))}
+      </ResponsiveGridLayout>
+    </div>
+  );
+};
+
+ReactDOM.render(<App />, document.getElementById("root"));
